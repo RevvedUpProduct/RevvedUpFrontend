@@ -46,11 +46,19 @@ export async function request(init) {
     });
 
     if (!res.ok) {
-      const message = await res.text().catch(() => res.statusText);
-      return {
-        ok: false,
-        error: {code: statusToCode(res.status), message: message || res.statusText},
-      };
+      // The backend returns { "error": { "code": "…", "message": "…" } } on errors.
+      // Try to extract that shape; fall back to raw text if the body isn't JSON or
+      // doesn't match the expected envelope.
+      let code = statusToCode(res.status);
+      let message = res.statusText;
+      try {
+        const body = await res.json();
+        if (body?.error?.message) message = body.error.message;
+        if (body?.error?.code) code = body.error.code;
+      } catch {
+        message = await res.text().catch(() => res.statusText) || res.statusText;
+      }
+      return {ok: false, error: {code, message}};
     }
 
     const data = await res.json();
@@ -62,14 +70,3 @@ export async function request(init) {
   }
 }
 
-export function simulateLatency() {
-  const {mockLatencyMinMs, mockLatencyMaxMs} = CONFIG.api;
-  const ms = mockLatencyMinMs + Math.random() * (mockLatencyMaxMs - mockLatencyMinMs);
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-export function maybeMockFailure() {
-  if (CONFIG.api.mockFailureRate <= 0) return null;
-  if (Math.random() >= CONFIG.api.mockFailureRate) return null;
-  return {code: 'NETWORK_ERROR', message: 'Simulated mock failure'};
-}

@@ -3,6 +3,7 @@ import {Platform, StyleSheet} from 'react-native';
 import MapView, {Marker, Polyline, PROVIDER_DEFAULT, PROVIDER_GOOGLE} from 'react-native-maps';
 import {COLORS, MAP_DARK_STYLE} from '@constants/colors';
 import {CONFIG} from '@constants/config';
+import {MemoryMapMarker} from './MemoryMapMarker';
 
 // Padding (dp) around the polyline bounding box when fitting the route view.
 const FIT_PADDING = {top: 80, right: 60, bottom: 80, left: 60};
@@ -103,12 +104,10 @@ export function RideMap({
       ) : null}
 
       {memories.map(memory => (
-        <Marker
+        <MemoryMapMarker
           key={memory.id}
-          coordinate={memory.coordinate}
-          pinColor={COLORS.mapMemoryMarker}
-          onPress={() => onMemoryPress?.(memory)}
-          title={memory.caption ?? 'Memory'}
+          memory={memory}
+          onPress={onMemoryPress}
         />
       ))}
     </MapView>

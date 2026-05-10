@@ -1,9 +1,8 @@
 import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {Alert, StyleSheet, View} from 'react-native';
+import {Alert, BackHandler, StyleSheet, View} from 'react-native';
 import {SafeAreaView} from 'react-native-safe-area-context';
 import {ScreenContainer, StatusPill} from '@components/index';
 import {COLORS} from '@constants/colors';
-import {CONFIG} from '@constants/config';
 import {SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
 import {useRideStore} from '@store/rideStore';
@@ -13,6 +12,8 @@ import {RideControls} from './components/RideControls';
 import {RideMap} from './components/RideMap';
 import {RideMetricsBar} from './components/RideMetricsBar';
 import {useRideTracker} from './useRideTracker';
+
+const ACTIVE_STATUSES = ['recording', 'paused'];
 
 export function RideRecordingScreen({navigation}) {
   const status = useRideStore(s => s.status);
@@ -24,13 +25,14 @@ export function RideRecordingScreen({navigation}) {
   const pauseRide = useRideStore(s => s.pauseRide);
   const resumeRide = useRideStore(s => s.resumeRide);
   const stopRide = useRideStore(s => s.stopRide);
+  const resetRide = useRideStore(s => s.reset);
 
   const memoriesByRide = useMemoryStore(s => s.byRide);
   const memories = rideId ? memoriesByRide[rideId] ?? [] : [];
 
   const [addMemoryVisible, setAddMemoryVisible] = useState(false);
 
-  useRideTracker({simulate: CONFIG.useMockServices});
+  useRideTracker();
 
   // Auto-start once on mount; ref guards against infinite retry if service fails.
   const hasAutoStarted = useRef(false);
@@ -42,6 +44,8 @@ export function RideRecordingScreen({navigation}) {
     }
   }, [status, startRide]);
 
+  // Centralised stop flow used by the Stop button, Android hardware back,
+  // and the navigation `beforeRemove` interceptor below.
   const handleStop = useCallback(() => {
     Alert.alert(STRINGS.ride.confirmStopTitle, STRINGS.ride.confirmStopMessage, [
       {text: STRINGS.ride.cancel, style: 'cancel'},
@@ -57,6 +61,58 @@ export function RideRecordingScreen({navigation}) {
       },
     ]);
   }, [stopRide, navigation]);
+
+  // Confirm-and-discard flow: the user pressed back / swiped while a ride is
+  // still active. They can either stay (cancel) or end the ride properly.
+  const confirmDiscardOrStop = useCallback(() => {
+    Alert.alert(
+      'Leave ride?',
+      'You have a ride in progress. End it now to save your route, or stay on the screen to keep recording.',
+      [
+        {text: 'Stay', style: 'cancel'},
+        {
+          text: STRINGS.ride.confirmStop,
+          style: 'destructive',
+          onPress: async () => {
+            const res = await stopRide();
+            if (res.ok && res.ride) {
+              navigation.replace('RideSummary', {rideId: res.ride.id});
+            } else {
+              // Stopping failed (e.g. backend down) — discard the local ride
+              // state and pop back to Home so the user isn't stuck.
+              resetRide();
+              navigation.navigate('Home');
+            }
+          },
+        },
+      ],
+    );
+  }, [stopRide, resetRide, navigation]);
+
+  // Intercept Android hardware back / OS edge-swipe back. Without this,
+  // pressing back while the ride screen is the top of stack just calls
+  // `goBack`, which loses the in-progress ride silently.
+  useEffect(() => {
+    const onHardwareBack = () => {
+      if (ACTIVE_STATUSES.includes(status)) {
+        confirmDiscardOrStop();
+        return true; // event consumed
+      }
+      return false; // let default back behaviour run
+    };
+    const sub = BackHandler.addEventListener('hardwareBackPress', onHardwareBack);
+    return () => sub.remove();
+  }, [status, confirmDiscardOrStop]);
+
+  // Intercept React Navigation back (header back arrow, swipe-back gesture).
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', e => {
+      if (!ACTIVE_STATUSES.includes(status)) return;
+      e.preventDefault();
+      confirmDiscardOrStop();
+    });
+    return unsubscribe;
+  }, [navigation, status, confirmDiscardOrStop]);
 
   const lastCoord = coordinates[coordinates.length - 1];
 

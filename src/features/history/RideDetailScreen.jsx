@@ -1,9 +1,10 @@
-import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useState} from 'react';
+import {ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {Card, MetricTile, ScreenContainer, SectionHeader} from '@components/index';
 import {COLORS} from '@constants/colors';
-import {FONT, SPACING} from '@constants/spacing';
+import {FONT, RADIUS, SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
+import {MemoryViewer} from '@features/ride/components/MemoryViewer';
 import {RideMap} from '@features/ride/components/RideMap';
 import {rideService} from '@services/rideService';
 import {useMemoryStore} from '@store/memoryStore';
@@ -15,9 +16,12 @@ export function RideDetailScreen({route, navigation}) {
   const {rideId} = route.params;
   const [ride, setRide] = useState(null);
   const [error, setError] = useState(null);
+  const [selectedMemory, setSelectedMemory] = useState(null);
 
   const memories = useMemoryStore(s => s.byRide[rideId] ?? EMPTY_MEMORIES);
   const loadMemories = useMemoryStore(s => s.loadMemoriesForRide);
+
+  const handleMemoryPress = useCallback(memory => setSelectedMemory(memory), []);
 
   useEffect(() => {
     let active = true;
@@ -67,7 +71,13 @@ export function RideDetailScreen({route, navigation}) {
     <ScreenContainer>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.mapWrapper}>
-          <RideMap coordinates={ride.coordinates} memories={memories} follow={false} />
+          <RideMap
+            coordinates={ride.coordinates}
+            memories={memories}
+            follow={false}
+            fitToRoute
+            onMemoryPress={handleMemoryPress}
+          />
         </View>
 
         <Card>
@@ -112,24 +122,46 @@ export function RideDetailScreen({route, navigation}) {
           <View style={styles.section}>
             <SectionHeader title={STRINGS.memory.title} />
             {memories.map(m => (
-              <Card key={m.id} style={styles.memoryRow}>
-                <View style={styles.memoryRowInner}>
-                  <Text style={styles.memoryGlyph}>📍</Text>
-                  <View style={{flex: 1}}>
-                    <Text style={styles.memoryTitle} numberOfLines={1}>
-                      {m.caption ?? 'Memory'}
-                    </Text>
-                    <Text style={styles.memoryMeta}>
-                      {formatTime(m.capturedAt)} · {m.coordinate.latitude.toFixed(4)},{' '}
-                      {m.coordinate.longitude.toFixed(4)}
-                    </Text>
+              <Pressable
+                key={m.id}
+                onPress={() => handleMemoryPress(m)}
+                accessibilityRole="button"
+                accessibilityLabel={m.caption ?? 'Memory'}
+                style={({pressed}) => pressed && styles.memoryPressed}>
+                <Card style={styles.memoryRow}>
+                  <View style={styles.memoryRowInner}>
+                    {/* Thumbnail */}
+                    <View style={styles.memoryThumbWrapper}>
+                      <Image
+                        source={{uri: m.imageUri}}
+                        style={styles.memoryThumb}
+                        resizeMode="cover"
+                      />
+                    </View>
+                    {/* Text */}
+                    <View style={styles.memoryText}>
+                      <Text style={styles.memoryTitle} numberOfLines={1}>
+                        {m.caption ?? 'Memory Snapshot'}
+                      </Text>
+                      <Text style={styles.memoryMeta}>
+                        {formatTime(m.capturedAt)}  ·  {m.coordinate.latitude.toFixed(4)},{' '}
+                        {m.coordinate.longitude.toFixed(4)}
+                      </Text>
+                    </View>
+                    <Text style={styles.memoryChevron}>›</Text>
                   </View>
-                </View>
-              </Card>
+                </Card>
+              </Pressable>
             ))}
           </View>
         ) : null}
       </ScrollView>
+
+      <MemoryViewer
+        memory={selectedMemory}
+        visible={!!selectedMemory}
+        onClose={() => setSelectedMemory(null)}
+      />
     </ScreenContainer>
   );
 }
@@ -160,9 +192,19 @@ const styles = StyleSheet.create({
   },
   metricRow: {flexDirection: 'row', gap: SPACING.lg},
   section: {gap: SPACING.sm},
-  memoryRow: {marginBottom: SPACING.sm},
+  memoryPressed: {opacity: 0.82},
+  memoryRow: {marginBottom: 0},
   memoryRowInner: {flexDirection: 'row', alignItems: 'center', gap: SPACING.md},
-  memoryGlyph: {fontSize: 24},
+  memoryThumbWrapper: {
+    width: 56,
+    height: 56,
+    borderRadius: RADIUS.md,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surfaceMuted,
+  },
+  memoryThumb: {width: '100%', height: '100%'},
+  memoryText: {flex: 1},
   memoryTitle: {color: COLORS.textPrimary, fontSize: FONT.size.md, fontWeight: FONT.weight.semibold},
   memoryMeta: {color: COLORS.textSecondary, fontSize: FONT.size.sm, marginTop: SPACING.xxs},
+  memoryChevron: {color: COLORS.textTertiary, fontSize: FONT.size.xl, fontWeight: FONT.weight.light},
 });

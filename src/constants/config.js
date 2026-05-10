@@ -1,12 +1,10 @@
 export const CONFIG = {
-  useMockServices: true,
-
   api: {
-    mockLatencyMinMs: 200,
-    mockLatencyMaxMs: 700,
-    mockFailureRate: 0,
-    baseUrl: 'https://api.revvedup.app/v1',
-    timeoutMs: 15_000,
+    // Real backend deployed on Render.
+    // NOTE: Render free tier has a ~30s cold start on first request after idle.
+    baseUrl: 'https://revvedup-api.onrender.com/api/v1',
+    // 65s covers the Render cold-start window with a small buffer.
+    timeoutMs: 65_000,
   },
 
   ride: {

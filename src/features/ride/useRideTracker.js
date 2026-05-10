@@ -1,20 +1,23 @@
 import {useEffect, useRef} from 'react';
 import {CONFIG} from '@constants/config';
 import {useRideStore} from '@store/rideStore';
-import {createNativeGeolocationProvider, createSimulatedGeolocationProvider} from './geolocation';
+import {createNativeGeolocationProvider} from './geolocation';
 
-export function useRideTracker({simulate = false} = {}) {
+/**
+ * Subscribes to the native GPS provider while the ride is in 'recording'
+ * state and feeds each fix into the ride store. Also drives the per-second
+ * metrics ticker so the duration / average speed update smoothly even
+ * between GPS fixes.
+ */
+export function useRideTracker() {
   const status = useRideStore(s => s.status);
   const appendCoordinate = useRideStore(s => s.appendCoordinate);
   const tick = useRideStore(s => s.tick);
   const setGpsStatus = useRideStore(s => s.setGpsStatus);
 
   const providerRef = useRef(null);
-
   if (providerRef.current === null) {
-    providerRef.current = simulate
-      ? createSimulatedGeolocationProvider()
-      : createNativeGeolocationProvider();
+    providerRef.current = createNativeGeolocationProvider();
   }
 
   useEffect(() => {

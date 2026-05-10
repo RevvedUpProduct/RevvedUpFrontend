@@ -45,7 +45,9 @@ export function RootNavigator() {
           component={RideRecordingScreen}
           options={{
             headerShown: false,
-            gestureEnabled: false,
+            // Swipe-back is enabled but the screen intercepts it via
+            // `beforeRemove` to confirm before discarding an active ride.
+            gestureEnabled: true,
             animation: 'fade_from_bottom',
           }}
         />

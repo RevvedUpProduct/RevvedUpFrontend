@@ -1,13 +1,14 @@
-import React, {useEffect, useState} from 'react';
-import {ActivityIndicator, ScrollView, StyleSheet, Text, View} from 'react-native';
+import React, {useCallback, useEffect, useState} from 'react';
+import {ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {Button, Card, MetricTile, ScreenContainer, SectionHeader} from '@components/index';
 import {COLORS} from '@constants/colors';
-import {FONT, SPACING} from '@constants/spacing';
+import {FONT, RADIUS, SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
 import {rideService} from '@services/rideService';
 import {useMemoryStore} from '@store/memoryStore';
 import {useRideStore} from '@store/rideStore';
 import {formatDate, formatDistance, formatDuration, formatSpeed} from '@utils/format';
+import {MemoryViewer} from './components/MemoryViewer';
 import {RideMap} from './components/RideMap';
 
 // Stable reference so the Zustand selector always returns the same empty array
@@ -19,10 +20,13 @@ export function RideSummaryScreen({route, navigation}) {
   const {rideId} = route.params;
   const [ride, setRide] = useState(null);
   const [error, setError] = useState(null);
+  const [selectedMemory, setSelectedMemory] = useState(null);
 
   const memories = useMemoryStore(s => s.byRide[rideId] ?? EMPTY_MEMORIES);
   const loadMemories = useMemoryStore(s => s.loadMemoriesForRide);
   const resetRide = useRideStore(s => s.reset);
+
+  const handleMemoryPress = useCallback(memory => setSelectedMemory(memory), []);
 
   useEffect(() => {
     let active = true;
@@ -67,6 +71,7 @@ export function RideSummaryScreen({route, navigation}) {
             memories={memories}
             follow={false}
             fitToRoute
+            onMemoryPress={handleMemoryPress}
           />
         </View>
 
@@ -113,11 +118,19 @@ export function RideSummaryScreen({route, navigation}) {
             <SectionHeader title={STRINGS.memory.title} />
             <View style={styles.memoryGrid}>
               {memories.map(m => (
-                <Card key={m.id} style={styles.memoryTile} padding="sm">
-                  <Text style={styles.memoryTime} numberOfLines={1}>
-                    {m.caption ?? '📷 Memory'}
-                  </Text>
-                </Card>
+                <Pressable
+                  key={m.id}
+                  style={({pressed}) => [styles.memoryTile, pressed && styles.memoryTilePressed]}
+                  onPress={() => handleMemoryPress(m)}
+                  accessibilityRole="button"
+                  accessibilityLabel={m.caption ?? 'Memory'}>
+                  <Image source={{uri: m.imageUri}} style={styles.memoryImage} resizeMode="cover" />
+                  {m.caption ? (
+                    <View style={styles.memoryCaptionOverlay}>
+                      <Text style={styles.memoryCaptionText} numberOfLines={2}>{m.caption}</Text>
+                    </View>
+                  ) : null}
+                </Pressable>
               ))}
             </View>
           </View>
@@ -133,6 +146,12 @@ export function RideSummaryScreen({route, navigation}) {
           }}
         />
       </ScrollView>
+
+      <MemoryViewer
+        memory={selectedMemory}
+        visible={!!selectedMemory}
+        onClose={() => setSelectedMemory(null)}
+      />
     </ScreenContainer>
   );
 }
@@ -166,7 +185,24 @@ const styles = StyleSheet.create({
   memoryTile: {
     width: '31%',
     aspectRatio: 1,
-    justifyContent: 'flex-end',
+    borderRadius: RADIUS.lg,
+    overflow: 'hidden',
+    backgroundColor: COLORS.surfaceMuted,
   },
-  memoryTime: {color: COLORS.textPrimary, fontSize: FONT.size.sm},
+  memoryTilePressed: {opacity: 0.82},
+  memoryImage: {width: '100%', height: '100%'},
+  memoryCaptionOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: 'rgba(0,0,0,0.52)',
+    paddingHorizontal: SPACING.xs,
+    paddingVertical: SPACING.xxs,
+  },
+  memoryCaptionText: {
+    color: '#FFFFFF',
+    fontSize: FONT.size.xs,
+    fontWeight: FONT.weight.medium,
+  },
 });

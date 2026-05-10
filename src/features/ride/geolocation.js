@@ -1,17 +1,29 @@
 function loadNativeGeolocation() {
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require('@react-native-community/geolocation');
+    // The package is shipped as an ES module with a default export. When loaded
+    // via `require`, Metro returns the module-namespace object; the real API
+    // (watchPosition, getCurrentPosition, clearWatch) lives on `.default`.
+    // We accept either shape so a plain CJS module would still work.
+    const mod = require('@react-native-community/geolocation');
+    return mod?.default ?? mod;
   } catch {
     return null;
   }
 }
 
+/**
+ * Wraps `@react-native-community/geolocation` so the rest of the app can stay
+ * agnostic to the underlying native module. Returns the same {latitude,
+ * longitude, speed, accuracy, ...} shape used by the ride store.
+ */
 export function createNativeGeolocationProvider() {
   const Geo = loadNativeGeolocation();
 
   if (!Geo) {
-    return createSimulatedGeolocationProvider();
+    throw new Error(
+      'Native geolocation module is not available. Make sure ' +
+        '@react-native-community/geolocation is installed and linked.',
+    );
   }
 
   return {
@@ -54,45 +66,6 @@ export function createNativeGeolocationProvider() {
           err => reject(new Error(err.message)),
           {enableHighAccuracy: true},
         );
-      });
-    },
-  };
-}
-
-/**
- * Walks a path roughly from Mumbai → Lonavala.
- */
-export function createSimulatedGeolocationProvider() {
-  let lat = 19.076;
-  let lng = 72.8777;
-  const dLat = 0.00012;
-  const dLng = 0.00018;
-  const tickMs = 1500;
-
-  return {
-    watch(onFix) {
-      const id = setInterval(() => {
-        const jitter = (Math.random() - 0.5) * 0.00006;
-        lat += dLat + jitter;
-        lng += dLng + jitter;
-        onFix({
-          latitude: lat,
-          longitude: lng,
-          timestamp: Date.now(),
-          speed: 16 + Math.random() * 6,
-          accuracy: 8,
-          heading: 110 + Math.random() * 5,
-        });
-      }, tickMs);
-      return () => clearInterval(id);
-    },
-    getCurrent() {
-      return Promise.resolve({
-        latitude: lat,
-        longitude: lng,
-        timestamp: Date.now(),
-        speed: 0,
-        accuracy: 8,
       });
     },
   };
