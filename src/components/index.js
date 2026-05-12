@@ -5,4 +5,5 @@ export {MetricTile} from './MetricTile';
 export {BottomSheet} from './BottomSheet';
 export {StatusPill} from './StatusPill';
 export {ScreenContainer} from './ScreenContainer';
+export {AppHeaderBar} from './AppHeaderBar';
 export {SectionHeader} from './SectionHeader';

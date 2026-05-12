@@ -1,19 +1,21 @@
-import React, {useEffect, useMemo} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
-  ActivityIndicator,
   FlatList,
   Pressable,
   RefreshControl,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import {Card, ScreenContainer} from '@components/index';
+import {useSafeAreaInsets} from 'react-native-safe-area-context';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import {Card} from '@components/index';
 import {COLORS} from '@constants/colors';
 import {FONT, RADIUS, SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
 import {useHistoryStore} from '@store/historyStore';
-import {formatDistance, formatDurationShort} from '@utils/format';
+import {formatDate, formatDistance, formatDurationShort} from '@utils/format';
 import {RideHistoryItem} from './components/RideHistoryItem';
 
 const FILTERS = [
@@ -22,23 +24,41 @@ const FILTERS = [
   {key: 'group', label: STRINGS.history.filterGroup},
 ];
 
+function rideMatchesQuery(ride, q) {
+  if (!q.trim()) return true;
+  const needle = q.trim().toLowerCase();
+  const hay = [
+    ride.id,
+    ride.type,
+    formatDate(ride.startedAt),
+    ride.startLocationLabel,
+    ride.endLocationLabel,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+  return hay.includes(needle);
+}
+
 export function RideHistoryScreen({navigation}) {
+  const insets = useSafeAreaInsets();
   const rides = useHistoryStore(s => s.rides);
-  const isLoading = useHistoryStore(s => s.isLoading);
   const isRefreshing = useHistoryStore(s => s.isRefreshing);
   const filter = useHistoryStore(s => s.filter);
   const load = useHistoryStore(s => s.load);
   const refresh = useHistoryStore(s => s.refresh);
   const setFilter = useHistoryStore(s => s.setFilter);
 
+  const [search, setSearch] = useState('');
+
   useEffect(() => {
-    void load();
+    load();
   }, [load]);
 
-  const filtered = useMemo(
-    () => (filter === 'all' ? rides : rides.filter(r => r.type === filter)),
-    [filter, rides],
-  );
+  const filtered = useMemo(() => {
+    const byType = filter === 'all' ? rides : rides.filter(r => r.type === filter);
+    return byType.filter(r => rideMatchesQuery(r, search));
+  }, [filter, rides, search]);
 
   const totals = useMemo(
     () => ({
@@ -60,6 +80,20 @@ export function RideHistoryScreen({navigation}) {
     <View style={styles.header}>
       <Text style={styles.title}>{STRINGS.history.title}</Text>
       <Text style={styles.subtitle}>{STRINGS.history.subtitle}</Text>
+
+      <View style={styles.searchRow}>
+        <MaterialCommunityIcons name="magnify" size={22} color={COLORS.textTertiary} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder={STRINGS.history.searchPlaceholder}
+          placeholderTextColor={COLORS.textTertiary}
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+          clearButtonMode="while-editing"
+        />
+      </View>
 
       <View style={styles.filterRow}>
         {FILTERS.map(f => {
@@ -111,13 +145,16 @@ export function RideHistoryScreen({navigation}) {
   );
 
   return (
-    <ScreenContainer>
+    <View style={styles.root}>
       <FlatList
         data={filtered}
         keyExtractor={r => r.id}
         renderItem={renderItem}
         ListHeaderComponent={Header}
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={[
+          styles.listContent,
+          {paddingTop: Math.max(insets.top, SPACING.sm)},
+        ]}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
         refreshControl={
           <RefreshControl
@@ -127,30 +164,44 @@ export function RideHistoryScreen({navigation}) {
           />
         }
         ListEmptyComponent={
-          isLoading ? (
-            <View style={styles.empty}>
-              <ActivityIndicator color={COLORS.accentPrimary} />
-            </View>
-          ) : (
-            <Card>
-              <Text style={styles.emptyLabel}>{STRINGS.home.noRides}</Text>
-            </Card>
-          )
+          <Card>
+            <Text style={styles.emptyLabel}>
+              {rides.length === 0 ? STRINGS.home.noRides : STRINGS.history.noSearchResults}
+            </Text>
+          </Card>
         }
       />
-    </ScreenContainer>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {flex: 1, backgroundColor: COLORS.background},
   listContent: {
     paddingHorizontal: SPACING.lg,
     paddingBottom: SPACING.xxl,
   },
-  header: {gap: SPACING.lg, paddingTop: SPACING.sm, paddingBottom: SPACING.lg},
+  header: {gap: SPACING.md, paddingBottom: SPACING.lg},
   title: {color: COLORS.textPrimary, fontSize: FONT.size.xxl, fontWeight: FONT.weight.bold},
   subtitle: {color: COLORS.textSecondary, fontSize: FONT.size.md},
-  filterRow: {flexDirection: 'row', gap: SPACING.sm},
+  searchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surface,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+  },
+  searchInput: {
+    flex: 1,
+    color: COLORS.textPrimary,
+    fontSize: FONT.size.md,
+    paddingVertical: SPACING.xs,
+  },
+  filterRow: {flexDirection: 'row', gap: SPACING.sm, flexWrap: 'wrap'},
   filterChip: {
     paddingHorizontal: SPACING.base,
     paddingVertical: SPACING.sm,
@@ -173,6 +224,5 @@ const styles = StyleSheet.create({
   statValue: {fontSize: FONT.size.lg, fontWeight: FONT.weight.bold},
   statLabel: {color: COLORS.textSecondary, fontSize: FONT.size.xs, textTransform: 'uppercase', letterSpacing: 0.4},
   separator: {height: SPACING.md},
-  empty: {paddingVertical: SPACING.xxl, alignItems: 'center'},
   emptyLabel: {color: COLORS.textSecondary, textAlign: 'center', fontSize: FONT.size.md, paddingVertical: SPACING.lg},
 });

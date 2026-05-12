@@ -6,8 +6,8 @@ import {FONT, RADIUS, SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
 import {MemoryViewer} from '@features/ride/components/MemoryViewer';
 import {RideMap} from '@features/ride/components/RideMap';
-import {rideService} from '@services/rideService';
 import {useMemoryStore} from '@store/memoryStore';
+import {useHistoryStore} from '@store/historyStore';
 import {formatDate, formatDistance, formatDuration, formatSpeed, formatTime} from '@utils/format';
 
 const EMPTY_MEMORIES = Object.freeze([]);
@@ -20,22 +20,21 @@ export function RideDetailScreen({route, navigation}) {
 
   const memories = useMemoryStore(s => s.byRide[rideId] ?? EMPTY_MEMORIES);
   const loadMemories = useMemoryStore(s => s.loadMemoriesForRide);
+  const getRideDetailFromCache = useHistoryStore(s => s.getRideDetailFromCache);
 
   const handleMemoryPress = useCallback(memory => setSelectedMemory(memory), []);
 
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      const res = await rideService.getRideById(rideId);
-      if (!active) return;
-      if (res.ok) setRide(res.data.ride);
-      else setError(res.error.message);
-    })();
-    void loadMemories(rideId);
-    return () => {
-      active = false;
-    };
-  }, [rideId, loadMemories]);
+    const cached = getRideDetailFromCache(rideId);
+    if (cached) {
+      setRide(cached);
+      setError(null);
+    } else {
+      setRide(null);
+      setError(STRINGS.errors.notFound);
+    }
+    loadMemories(rideId);
+  }, [rideId, loadMemories, getRideDetailFromCache]);
 
   useEffect(() => {
     if (ride) {

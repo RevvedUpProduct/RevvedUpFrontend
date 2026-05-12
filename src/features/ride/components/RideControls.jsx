@@ -4,7 +4,7 @@ import {IconButton} from '@components/IconButton';
 import {SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
 
-export function RideControls({status, onPause, onResume, onStop, onAddMemory}) {
+export function RideControls({status, onPause, onResume, onStop, onAddMemory, stopDisabled = false}) {
   const isPaused = status === 'paused';
 
   return (
@@ -32,6 +32,7 @@ export function RideControls({status, onPause, onResume, onStop, onAddMemory}) {
         onPress={onStop}
         accessibilityLabel={STRINGS.ride.stop}
         testID="ride-stop"
+        disabled={stopDisabled}
       />
     </View>
   );

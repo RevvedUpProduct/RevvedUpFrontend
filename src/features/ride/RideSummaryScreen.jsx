@@ -1,19 +1,16 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
+import {Image, Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
 import {Button, Card, MetricTile, ScreenContainer, SectionHeader} from '@components/index';
 import {COLORS} from '@constants/colors';
 import {FONT, RADIUS, SPACING} from '@constants/spacing';
 import {STRINGS} from '@constants/strings';
-import {rideService} from '@services/rideService';
 import {useMemoryStore} from '@store/memoryStore';
 import {useRideStore} from '@store/rideStore';
+import {useHistoryStore} from '@store/historyStore';
 import {formatDate, formatDistance, formatDuration, formatSpeed} from '@utils/format';
 import {MemoryViewer} from './components/MemoryViewer';
 import {RideMap} from './components/RideMap';
 
-// Stable reference so the Zustand selector always returns the same empty array
-// identity when there are no memories yet, avoiding the useSyncExternalStore
-// "getSnapshot result must be cached" infinite-loop warning.
 const EMPTY_MEMORIES = Object.freeze([]);
 
 export function RideSummaryScreen({route, navigation}) {
@@ -25,38 +22,27 @@ export function RideSummaryScreen({route, navigation}) {
   const memories = useMemoryStore(s => s.byRide[rideId] ?? EMPTY_MEMORIES);
   const loadMemories = useMemoryStore(s => s.loadMemoriesForRide);
   const resetRide = useRideStore(s => s.reset);
+  const getRideDetailFromCache = useHistoryStore(s => s.getRideDetailFromCache);
 
   const handleMemoryPress = useCallback(memory => setSelectedMemory(memory), []);
 
   useEffect(() => {
-    let active = true;
-    void (async () => {
-      const res = await rideService.getRideById(rideId);
-      if (!active) return;
-      if (res.ok) setRide(res.data.ride);
-      else setError(res.error.message);
-    })();
-    void loadMemories(rideId);
-    return () => {
-      active = false;
-    };
-  }, [rideId, loadMemories]);
+    const cached = getRideDetailFromCache(rideId);
+    if (cached) {
+      setRide(cached);
+      setError(null);
+    } else {
+      setRide(null);
+      setError(STRINGS.errors.notFound);
+    }
+    loadMemories(rideId);
+  }, [rideId, loadMemories, getRideDetailFromCache]);
 
-  if (error) {
+  if (error || !ride) {
     return (
       <ScreenContainer>
         <View style={styles.centered}>
-          <Text style={styles.error}>{error}</Text>
-        </View>
-      </ScreenContainer>
-    );
-  }
-
-  if (!ride) {
-    return (
-      <ScreenContainer>
-        <View style={styles.centered}>
-          <ActivityIndicator color={COLORS.accentPrimary} />
+          <Text style={styles.error}>{error ?? STRINGS.errors.notFound}</Text>
         </View>
       </ScreenContainer>
     );

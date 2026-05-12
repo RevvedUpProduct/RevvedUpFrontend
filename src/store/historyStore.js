@@ -1,5 +1,5 @@
 import {create} from 'zustand';
-import {rideService} from '@services/rideService';
+import {readJSON, writeJSON, STORAGE_KEYS} from '@services/storage';
 
 const initialState = {
   rides: [],
@@ -12,26 +12,63 @@ const initialState = {
 export const useHistoryStore = create((set, get) => ({
   ...initialState,
 
-  load: async () => {
-    if (get().isLoading) return;
-    set({isLoading: true, error: null});
-    const res = await rideService.getRideHistory({});
-    if (!res.ok) {
-      set({isLoading: false, error: res.error.message});
-      return;
+  /**
+   * Boot: read ride list from MMKV only (no network in local-only phase).
+   */
+  hydrate: () => {
+    const cached = readJSON(STORAGE_KEYS.RIDES);
+    if (cached) {
+      set({rides: cached});
     }
-    set({rides: res.data.rides, isLoading: false});
   },
 
+  /**
+   * Re-read history list from MMKV (e.g. after external writes).
+   */
+  load: () => {
+    const cached = readJSON(STORAGE_KEYS.RIDES);
+    set({rides: cached ?? [], isLoading: false, error: null});
+  },
+
+  /**
+   * Pull-to-refresh: re-load from disk only (no API).
+   */
   refresh: async () => {
     set({isRefreshing: true, error: null});
-    const res = await rideService.getRideHistory({});
-    if (!res.ok) {
-      set({isRefreshing: false, error: res.error.message});
-      return;
-    }
-    set({rides: res.data.rides, isRefreshing: false});
+    const cached = readJSON(STORAGE_KEYS.RIDES);
+    set({rides: cached ?? [], isRefreshing: false, error: null});
   },
 
-  setFilter: (filter) => set({filter}),
+  persistRide: ride => {
+    const summary = {
+      id: ride.id,
+      type: ride.type ?? 'solo',
+      startedAt: ride.startedAt,
+      endedAt: ride.endedAt,
+      distanceMeters: ride.metrics?.distanceMeters ?? 0,
+      durationMs: ride.metrics?.durationMs ?? 0,
+      startLocationLabel: ride.startLocationLabel ?? null,
+      endLocationLabel: ride.endLocationLabel ?? null,
+      memoryCount: ride.memoryIds?.length ?? 0,
+    };
+
+    const current = get().rides;
+    const exists = current.some(r => r.id === summary.id);
+    const updated = exists
+      ? current.map(r => (r.id === summary.id ? summary : r))
+      : [summary, ...current];
+
+    writeJSON(STORAGE_KEYS.RIDES, updated);
+    set({rides: updated});
+  },
+
+  persistRideDetail: ride => {
+    writeJSON(STORAGE_KEYS.rideDetail(ride.id), ride);
+  },
+
+  getRideDetailFromCache: rideId => {
+    return readJSON(STORAGE_KEYS.rideDetail(rideId));
+  },
+
+  setFilter: filter => set({filter}),
 }));

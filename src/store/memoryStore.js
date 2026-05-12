@@ -1,5 +1,6 @@
 import {create} from 'zustand';
 import {memoryService} from '@services/memoryService';
+import {readJSON, writeJSON, STORAGE_KEYS} from '@services/storage';
 
 const initialState = {
   byRide: {},
@@ -7,48 +8,119 @@ const initialState = {
   error: null,
 };
 
+function readByRide() {
+  const stored = readJSON(STORAGE_KEYS.MEMORIES);
+  return stored?.byRide ?? {};
+}
+
+function writeByRide(byRide) {
+  writeJSON(STORAGE_KEYS.MEMORIES, {byRide});
+}
+
 export const useMemoryStore = create((set, get) => ({
   ...initialState,
 
+  hydrate: () => {
+    const byRide = readByRide();
+    set({byRide});
+  },
+
   addMemory: async ({rideId, imageUri, coordinate, caption, capturedAt}) => {
     set({isAdding: true, error: null});
+
+    const tempId = `local_${Date.now()}`;
+    const optimistic = {
+      id: tempId,
+      rideId,
+      imageUri,
+      caption: caption ?? null,
+      coordinate,
+      capturedAt: capturedAt ?? new Date().toISOString(),
+    };
+
+    const prevByRide = get().byRide;
+    const prevList = prevByRide[rideId] ?? [];
+    const optimisticByRide = {...prevByRide, [rideId]: [...prevList, optimistic]};
+    set({byRide: optimisticByRide});
+    writeByRide(optimisticByRide);
+
     const res = await memoryService.addMemory({
       rideId,
       imageUri,
       caption,
       coordinate,
-      capturedAt: capturedAt ?? new Date().toISOString(),
+      capturedAt: optimistic.capturedAt,
     });
 
     if (!res.ok) {
-      set({isAdding: false, error: res.error.message});
+      const reverted = {
+        ...get().byRide,
+        [rideId]: (get().byRide[rideId] ?? []).filter(m => m.id !== tempId),
+      };
+      set({isAdding: false, error: res.error.message, byRide: reverted});
+      writeByRide(reverted);
       return {ok: false, error: res.error.message};
     }
 
-    const existing = get().byRide[rideId] ?? [];
-    set({
-      isAdding: false,
-      byRide: {...get().byRide, [rideId]: [...existing, res.data.memory]},
-    });
-    return {ok: true, memory: res.data.memory};
+    const serverMemory = res.data.memory;
+    const currentList = get().byRide[rideId] ?? [];
+    const confirmed = currentList.map(m => (m.id === tempId ? serverMemory : m));
+    const confirmedByRide = {...get().byRide, [rideId]: confirmed};
+    set({isAdding: false, byRide: confirmedByRide});
+    writeByRide(confirmedByRide);
+    return {ok: true, memory: serverMemory};
   },
 
-  loadMemoriesForRide: async (rideId) => {
-    const res = await memoryService.getMemoriesByRide(rideId);
-    if (!res.ok) {
-      set({error: res.error.message});
+  /**
+   * Local-only phase: populate from MMKV only (no API read).
+   */
+  loadMemoriesForRide: rideId => {
+    const stored = readByRide();
+    const list = stored[rideId] ?? [];
+    set(state => ({
+      byRide: {...state.byRide, [rideId]: list},
+    }));
+  },
+
+  /**
+   * When the server assigns a canonical ride id, move optimistic memories off the provisional key.
+   */
+  rekeyRideMemories: (fromRideId, toRideId) => {
+    if (!fromRideId || !toRideId || fromRideId === toRideId) return;
+    const byRide = {...get().byRide};
+    const moved = byRide[fromRideId];
+    if (!moved?.length) {
+      delete byRide[fromRideId];
+      writeByRide(byRide);
+      set({byRide});
       return;
     }
-    set({byRide: {...get().byRide, [rideId]: res.data.memories}});
+    const reTagged = moved.map(m => ({...m, rideId: toRideId}));
+    const merged = [...(byRide[toRideId] ?? []), ...reTagged];
+    delete byRide[fromRideId];
+    byRide[toRideId] = merged;
+    writeByRide(byRide);
+    set({byRide});
   },
 
   removeMemory: async (memoryId, rideId) => {
+    const before = get().byRide[rideId] ?? [];
+    const after = before.filter(m => m.id !== memoryId);
+    const updated = {...get().byRide, [rideId]: after};
+    set({byRide: updated});
+    writeByRide(updated);
+
     const res = await memoryService.deleteMemory(memoryId);
-    if (!res.ok) return {ok: false, error: res.error.message};
-    const remaining = (get().byRide[rideId] ?? []).filter(m => m.id !== memoryId);
-    set({byRide: {...get().byRide, [rideId]: remaining}});
+    if (!res.ok) {
+      const reverted = {...get().byRide, [rideId]: before};
+      set({byRide: reverted});
+      writeByRide(reverted);
+      return {ok: false, error: res.error.message};
+    }
     return {ok: true};
   },
 
-  reset: () => set({...initialState}),
+  reset: () => {
+    set({...initialState});
+  },
 }));

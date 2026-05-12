@@ -34,6 +34,12 @@
 	</dict>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string></string>
+	<key>NSCameraUsageDescription</key>
+	<string>RevvedUp uses the camera to capture photos you attach as ride memories.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RevvedUp needs access to your photo library so you can attach existing photos as ride memories.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RevvedUp can save captured memories to your library when you enable that option.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -48,5 +54,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<false/>
+	<key>UIAppFonts</key>
+	<array>
+		<string>MaterialCommunityIcons.ttf</string>
+	</array>
 </dict>
 </plist>

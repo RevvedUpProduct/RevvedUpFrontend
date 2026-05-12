@@ -1,49 +1,39 @@
 import React from 'react';
-import {StyleSheet, Text, View} from 'react-native';
 import {Marker} from 'react-native-maps';
-import {COLORS} from '@constants/colors';
-import {SHADOW} from '@constants/spacing';
+
+/** Bundled raster icon — Maps markers only accept images, not vector icon components. */
+const MEMORY_MARKER_IMAGE = require('../../../assets/map/memory-marker.png');
 
 /**
- * Compact heart-shaped marker for memory snapshots on the map.
+ * Memory pin on the map.
  *
- * tracksViewChanges is false because the marker visual is static — keeping it
- * true causes constant re-renders and flicker on Android with PROVIDER_GOOGLE.
- *
- * The anchor is set to {x:0.5, y:1} so the bottom centre of the badge sits on
- * the exact GPS coordinate.
+ * IMPORTANT (Android / Google Maps + Fabric): Do not render custom React children
+ * inside `<Marker>` — ViewAttacherGroup crashes when markers update. Use `image={require(...)}`.
  */
-export function MemoryMapMarker({memory, onPress}) {
-  return (
-    <Marker
-      coordinate={memory.coordinate}
-      tracksViewChanges={false}
-      onPress={() => onPress?.(memory)}
-      anchor={{x: 0.5, y: 1}}>
-      <View style={[styles.badge, SHADOW.sm]}>
-        <Text style={styles.heart} allowFontScaling={false}>♥</Text>
-      </View>
-    </Marker>
-  );
+function parseCoordinate(coord) {
+  if (!coord || typeof coord !== 'object') return null;
+  const latitude = Number(coord.latitude);
+  const longitude = Number(coord.longitude);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+  if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return {latitude, longitude};
 }
 
-const styles = StyleSheet.create({
-  badge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: COLORS.danger,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  heart: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 16,
-    includeFontPadding: false,
-    textAlignVertical: 'center',
-  },
-});
+export function MemoryMapMarker({memory, onPress}) {
+  const coordinate = parseCoordinate(memory?.coordinate);
+  if (!coordinate) return null;
+
+  const rawCaption = memory.caption != null ? String(memory.caption).trim() : '';
+  const title = rawCaption.length > 0 ? rawCaption.slice(0, 60) : 'Memory';
+
+  return (
+    <Marker
+      coordinate={coordinate}
+      image={MEMORY_MARKER_IMAGE}
+      anchor={{x: 0.5, y: 1}}
+      title={title}
+      tracksViewChanges={false}
+      onPress={() => onPress?.(memory)}
+    />
+  );
+}
